@@ -125,7 +125,7 @@ class HCaptcha
         // A response can only be verified once from hCaptcha, so we need to
         // cache it to make it work in case we want to verify it multiple times.
         if (isset($this->cachedResponses[$response])) {
-            return $this->cachedResponse[$response];
+            return $this->cachedResponses[$response];
         }
 
         return $this->cachedResponses[$response] = $this->sendRequestVerify([
