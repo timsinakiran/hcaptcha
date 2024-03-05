@@ -116,8 +116,11 @@ class HCaptcha
 
     /**
      * Get the hCaptcha verification details for a given response
+     *
+     * @param string $response
+     * @param string $clientIp
      */
-    public function getResponseDetails(string $response): array
+    public function getResponseDetails(string $response, $clientIp = null): array
     {
         // A response can only be verified once from hCaptcha, so we need to
         // cache it to make it work in case we want to verify it multiple times.
@@ -146,7 +149,7 @@ class HCaptcha
             return false;
         }
 
-        $verifyResponse = $this->getResponseDetails($responce);
+        $verifyResponse = $this->getResponseDetails($response, $clientIp);
 
         if (isset($verifyResponse['success']) && $verifyResponse['success'] === true) {
             // Check score if it's enabled.
