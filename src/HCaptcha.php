@@ -30,11 +30,11 @@ class HCaptcha
     protected $http;
 
     /**
-     * The cached verified responses.
+     * The cached responses.
      *
      * @var array
      */
-    protected $verifiedResponses = [];
+    protected $cachedResponses = [];
 
     /**
      * HCaptcha.
@@ -115,6 +115,24 @@ class HCaptcha
     }
 
     /**
+     * Get the hCaptcha verification details for a given response
+     */
+    public function getResponseDetails(string $response): array
+    {
+        // A response can only be verified once from hCaptcha, so we need to
+        // cache it to make it work in case we want to verify it multiple times.
+        if (isset($this->cachedResponses[$response])) {
+            return $this->cachedResponse[$response];
+        }
+
+        return $this->cachedResponses[$response] = $this->sendRequestVerify([
+            'secret'   => $this->secret,
+            'response' => $response,
+            'remoteip' => $clientIp,
+        ]);
+    }
+
+    /**
      * Verify hCaptcha response.
      *
      * @param string $response
@@ -128,16 +146,7 @@ class HCaptcha
             return false;
         }
 
-        // Return true if response already verfied before.
-        if (in_array($response, $this->verifiedResponses)) {
-            return true;
-        }
-
-        $verifyResponse = $this->sendRequestVerify([
-            'secret'   => $this->secret,
-            'response' => $response,
-            'remoteip' => $clientIp,
-        ]);
+        $verifyResponse = $this->getResponseDetails($responce);
 
         if (isset($verifyResponse['success']) && $verifyResponse['success'] === true) {
             // Check score if it's enabled.
@@ -151,9 +160,6 @@ class HCaptcha
                 return false;
             }
 
-            // A response can only be verified once from hCaptcha, so we need to
-            // cache it to make it work in case we want to verify it multiple times.
-            $this->verifiedResponses[] = $response;
             return true;
         } else {
             return false;
