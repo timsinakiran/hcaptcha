@@ -2,6 +2,7 @@
 
 namespace Scyllaly\HCaptcha;
 
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Request;
 use GuzzleHttp\Client;
 
@@ -128,11 +129,17 @@ class HCaptcha
             return $this->cachedResponses[$response];
         }
 
-        return $this->cachedResponses[$response] = $this->sendRequestVerify([
-            'secret'   => $this->secret,
-            'response' => $response,
-            'remoteip' => $clientIp,
-        ]);
+        return $this->cachedResponses[$response] = Cache::remember(
+            'hcaptcha_response_' . $response,
+            now()->addDays(1),
+            function () use ($response, $clientIp) {
+                return $this->sendRequestVerify([
+                    'secret'   => $this->secret,
+                    'response' => $response,
+                    'remoteip' => $clientIp,
+                ]);
+            }
+        );
     }
 
     /**
