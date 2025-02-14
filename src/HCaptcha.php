@@ -2,7 +2,6 @@
 
 namespace Scyllaly\HCaptcha;
 
-use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Request;
 use GuzzleHttp\Client;
 
@@ -31,11 +30,24 @@ class HCaptcha
     protected $http;
 
     /**
-     * The cached responses.
+     * The cached verified responses.
      *
      * @var array
      */
-    protected $cachedResponses = [];
+    protected $verifiedResponses = [];
+
+    /**
+     * @var null
+     * lastScore
+     */
+    protected $lastScore = null;
+
+    /**
+     * Whether to use hCaptcha or not.
+     *
+     * @var bool
+     */
+    protected $enabled;
 
     /**
      * HCaptcha.
@@ -43,12 +55,14 @@ class HCaptcha
      * @param string $secret
      * @param string $sitekey
      * @param array  $options
+     * @param bool   $enabled
      */
-    public function __construct($secret, $sitekey, $options = [])
+    public function __construct($secret, $sitekey, $options = [], $enabled = true)
     {
         $this->secret = $secret;
         $this->sitekey = $sitekey;
         $this->http = new Client($options);
+        $this->enabled = $enabled;
     }
 
     /**
@@ -60,6 +74,10 @@ class HCaptcha
      */
     public function display($attributes = [])
     {
+        if (!$this->enabled) {
+            return '';
+        }
+
         $attributes = $this->prepareAttributes($attributes);
         return '<div' . $this->buildAttributes($attributes) . '></div>';
     }
@@ -83,6 +101,10 @@ class HCaptcha
      */
     public function displaySubmit($formIdentifier, $text = 'submit', $attributes = [])
     {
+        if (!$this->enabled) {
+            return sprintf('<button%s><span>%s</span></button>', $this->buildAttributes($attributes), $text);
+        }
+
         $javascript = '';
         if (!isset($attributes['data-callback'])) {
             $functionName = 'onSubmit' . str_replace(['-', '=', '\'', '"', '<', '>', '`'], '', $formIdentifier);
@@ -112,34 +134,11 @@ class HCaptcha
      */
     public function renderJs($lang = null, $callback = false, $onLoadClass = 'onloadCallBack')
     {
-        return '<script src="' . $this->getJsLink($lang, $callback, $onLoadClass) . '" async defer></script>' . "\n";
-    }
-
-    /**
-     * Get the hCaptcha verification details for a given response
-     *
-     * @param string $response
-     * @param string $clientIp
-     */
-    public function getResponseDetails(string $response, $clientIp = null): array
-    {
-        // A response can only be verified once from hCaptcha, so we need to
-        // cache it to make it work in case we want to verify it multiple times.
-        if (isset($this->cachedResponses[$response])) {
-            return $this->cachedResponses[$response];
+        if (!$this->enabled) {
+            return '';
         }
 
-        return $this->cachedResponses[$response] = Cache::remember(
-            'hcaptcha_response_' . $response,
-            now()->addDays(1),
-            function () use ($response, $clientIp) {
-                return $this->sendRequestVerify([
-                    'secret'   => $this->secret,
-                    'response' => $response,
-                    'remoteip' => $clientIp,
-                ]);
-            }
-        );
+        return '<script src="' . $this->getJsLink($lang, $callback, $onLoadClass) . '" async defer></script>' . "\n";
     }
 
     /**
@@ -152,13 +151,27 @@ class HCaptcha
      */
     public function verifyResponse($response, $clientIp = null)
     {
+        if (!$this->enabled) {
+            return true; // Always true if hCaptcha is disabled
+        }
+
         if (empty($response)) {
             return false;
         }
 
-        $verifyResponse = $this->getResponseDetails($response, $clientIp);
+        // Return true if response already verified before.
+        if (in_array($response, $this->verifiedResponses)) {
+            return true;
+        }
+
+        $verifyResponse = $this->sendRequestVerify([
+            'secret'   => $this->secret,
+            'response' => $response,
+            'remoteip' => $clientIp,
+        ]);
 
         if (isset($verifyResponse['success']) && $verifyResponse['success'] === true) {
+            $this->lastScore = isset($verifyResponse['score']) ? $verifyResponse['score'] : null;
             // Check score if it's enabled.
             $isScoreVerificationEnabled = config('HCaptcha.score_verification_enabled', false);
 
@@ -170,6 +183,9 @@ class HCaptcha
                 return false;
             }
 
+            // A response can only be verified once from hCaptcha, so we need to
+            // cache it to make it work in case we want to verify it multiple times.
+            $this->verifiedResponses[] = $response;
             return true;
         } else {
             return false;
@@ -202,6 +218,10 @@ class HCaptcha
      */
     public function getJsLink($lang = null, $callback = false, $onLoadClass = 'onloadCallBack')
     {
+        if (!$this->enabled) {
+            return '';
+        }
+
         $client_api = static::CLIENT_API;
         $params = [];
 
@@ -209,6 +229,16 @@ class HCaptcha
         $lang ? $params['hl'] = $lang : null;
 
         return $client_api . '?' . http_build_query($params);
+    }
+
+    /**
+     * Get the score from the last successful hCaptcha verification.
+     *
+     * @return float|null The score of the last verification or null if not available.
+     */
+    public function getScoreFromLastVerification()
+    {
+        return $this->lastScore;
     }
 
     /**
