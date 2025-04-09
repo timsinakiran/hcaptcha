@@ -1,6 +1,6 @@
 {
-    "name": "scyllaly/hcaptcha",
-    "description": "hCaptcha for Laravel",
+    "name": "timsinakiran/hcaptcha",
+    "description": "hCaptcha for Laravel 12",
     "keywords": [
         "hcaptcha",
         "captcha",
@@ -9,8 +9,8 @@
     "license": "MIT",
     "authors": [
         {
-            "name": "scyllaly",
-            "email": "scyllaly@github.com"
+            "name": "scyllaly-laravel12",
+            "email": "timsinakiran@gmail.com"
         }
     ],
     "require": {
